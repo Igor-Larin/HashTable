@@ -6,18 +6,19 @@
 using namespace std;
 /*
  * CMD_FIND - команда поиска элемента по шифру
- * CMD_POP - команда удаления элемента по шифру
  * CMD_PRINT - команда вывода таблицы на экран
+ * CMD_SORT - команда сортировки по количеству изделий
  * CMD_EXIT - команда выхода из программы
 */
-enum Comands { CMD_FIND = 1, CMD_POP, CMD_PRINT, CMD_EXIT };
-const unsigned int capacity = 13; // Размер таблицы должен быть простым числом
+enum Comands { CMD_FIND = 1, CMD_PRINT, CMD_SORT, CMD_EXIT };
+
+const size_t capacity = 13; // Размер таблицы должен быть простым числом
 
 struct hashTable
 {
-   unsigned int value; // Количество изделия 
+   size_t value, price; // Количество изделия 
    string name, key; // Символьное имя и 8-ми символьный шифр
-   hashTable(unsigned int v, string k, string n) : value(v), key(k), name(n){}
+   hashTable(string k = "", size_t p = 0, size_t v = 0, string n = "") : key(k), price(p), value(v), name(n){}
 };
 
 /**
@@ -25,29 +26,65 @@ struct hashTable
  * @param key - 8-ми символьная строка
  * Возвращаемое значение - готовый индекс
 */
-unsigned int getIndex(string key)
+size_t getIndex(string key)
 {
-   unsigned int idx = 0;
+   size_t idx = 0;
+   size_t strLen = key.length();
    // Суммируем коды символов строки
-   for (size_t i = 0; i < key.length(); i++) {
-      idx += key[i] > 0 ? key[i] : -1 * key[i];
-   }
+   for (size_t i = 0; i < strLen; i++) 
+      idx += key[i] > 0 ? key[i] : - key[i];
    return idx;
 }
 
 /**
- * Функция вставки элемента в хеш-таблицу
+ * Функция вставки элемента в хеш-таблицу с ценами
+ * Отсутствуют параметры количества и имени изделия
  * @param hashTable - указатель на хеш-таблицу
  * @param key - 8-ми символьная строка
- * @param name - символьная строка
+ * @param price - целое число, цена изделия
  */
-void insert(hashTable *t[], string key, unsigned int value, string name)
+void insert(hashTable *t[], string key, size_t price)
 {
    if (key.length() == 8)
    {
       bool isNotInserted = true; // Флаг незавершенности операции вставки
       // Независимые хеш-функции, поэтому вероятность коллизий уменьшается
-      unsigned int x = getIndex(key) % capacity, // Первоначальный индекс ячейки - результат хеш-функции
+      size_t x = getIndex(key) % capacity, // Первоначальный индекс ячейки - результат хеш-функции
+         y = 1 + getIndex(key) % (capacity - 2); // Значение для рехеширования x, 0 < y < capacity
+     // Поиск ячейки для вставки, исследуются индексы x
+      for (size_t i = 1; isNotInserted && i < capacity; i++)
+      {
+         // Проверка, что ячейка занята
+         if (!t[x])
+         {
+            // Если ключи совпадают, то суммируем значени
+            t[x] = new hashTable(key, price);
+            isNotInserted = false;
+         }
+         x = (x + i * y) % capacity; // Если вставка не удалась - рехешируем x
+      }
+      if (isNotInserted)
+         cout << "Увеличьте размер таблицы" << endl << key << " не поместился в таблицу" << endl;
+   }
+   else
+      cout << key << " - некорректный шифр, его длина должна быть 8 символов" << endl;
+}
+
+/**
+ * Перегруженный метод для вставки элемента в основную таблицу
+ * @param hashTable - указатель на хеш-таблицу
+ * @param key - 8-ми символьная строка
+ * @param price - цена изделия
+ * @param value - количество изделия
+ * @param name - символьная строка
+ */
+void insert(hashTable *t[], string key, size_t price, size_t value, string name)
+{
+   if (key.length() == 8)
+   {
+      bool isNotInserted = true; // Флаг незавершенности операции вставки
+      // Независимые хеш-функции, поэтому вероятность коллизий уменьшается
+      size_t x = getIndex(key) % capacity, // Первоначальный индекс ячейки - результат хеш-функции
          y = 1 + getIndex(key) % (capacity - 2); // Значение для рехеширования x, 0 < y < capacity
      // Поиск ячейки для вставки, исследуются индексы x
       for (size_t i = 1; isNotInserted && i < capacity; i++)
@@ -64,7 +101,7 @@ void insert(hashTable *t[], string key, unsigned int value, string name)
          }
          else // Помещаем элемент в ячейку
          {
-            t[x] = new hashTable(value, key, name);
+            t[x] = new hashTable(key, price, value, name);
             isNotInserted = false;
          }
          x = (x + i * y) % capacity; // Если вставка не удалась - рехешируем x
@@ -77,58 +114,29 @@ void insert(hashTable *t[], string key, unsigned int value, string name)
 }
 
 /**
- * Функция удаления элемента в хеш-таблицу,
- * рассматриваются индексы, которые были при вставке
- * @param hashTable - указатель на хеш-таблицу
- * @param key - 8-ми символьная строка
- */
-void remove(hashTable *t[], string key)
-{
-   bool isNotRemoved = true; // Флаг незавершенности операции удаления
-   int x = getIndex(key) % capacity, // Первоначальный индекс ячейки - результат хеш-функции
-       y = 1 + getIndex(key) % (capacity - 2); // Значение для рехеширования x, 0 < y < capacity
-   // Поиск происходит по наиболее возможным индексам ячеек
-   for (size_t i = 1; isNotRemoved && i < capacity; i++)
-   {
-      // Проверка, что ячейка не пуста
-      if (t[x])
-         if (t[x]->key == key) 
-         {
-            hashTable *dl_ptr = t[x];
-            t[x] = NULL;
-            delete dl_ptr;
-            cout << "Элемент удален" << endl;
-            isNotRemoved = false;
-         }
-      x = (x + i * y) % capacity; // Исследуем следующие возможные позиции
-   }
-   // Если под всеми возможными ячейками не нашли элемент
-   if(isNotRemoved)
-      cout << "Элемент отсутствует" << endl;
-}
-
-/**
  * Функция поиска элемента в хеш-таблице,
- * рассматриваются индексы, которые были при вставке
+ * по условию задачи поиск происходит последовательно
  * @param hashTable - указатель на хеш-таблицу
  * @param key - 8-ми символьная строка
-  * Возвращаемое значение - указатель на найденную ячейку
+ * Возвращаемое значение - указатель на найденную ячейку
  */
 hashTable *find(hashTable *t[], string key)
 {
-   int x = getIndex(key) % capacity, // Индекс ячейки
-      y = 1 + getIndex(key) % (capacity - 2); // Значение для рехеширования x, 0 < y < capacity
-   // Поиск происходит по наиболее возможным индексам ячеек
-   for (size_t i = 1; i < capacity; i++)
-   {
-      // Проверка, что ячейка не пуста
-      // Нельзя после невыполнения этого условия возвращать NULL
-      if (t[x] && t[x]->key == key)
-            return t[x];
-      x = (x + i * y) % capacity;
-   }
-   // Если под всеми возможными ячейками не нашли элемент
-   return NULL;
+   // Флаг нахождения нужного элемента
+   bool isNotFound = true;
+   // Переменная позиции найденного элемента
+   size_t x = 0;
+   for (size_t i = 0; isNotFound && i < capacity; i++)
+      // Не пуста ли ячейка, тогда сравниваем ключи
+      if (t[i] && key == t[i]->key)
+      {
+         isNotFound = false;
+         x = i;
+      }
+   if (isNotFound)
+      return NULL;
+   else
+      return t[x];
 }
 
 /**
@@ -140,9 +148,97 @@ void print(hashTable *t[])
    for (size_t i = 0; i < capacity; i++)
    {
       if (t[i])
-         cout << t[i]->key << " " << t[i]->value << " " << t[i]->name << endl;
+         cout << t[i]->key << " " << t[i]->value << " " << t[i]->name << " " << t[i]->price << endl;
       else
          cout << "NULL" << endl;
+   }
+}
+
+/**
+ * Функция проверяет необходимость смены позиций ключей
+ * Сортировка по алфавиту, но цифры и символы приоритетнее
+ * @param keyF - первый сравниваемый ключ
+ * @param keyL - второй сравниваемый ключ
+ */
+bool needToSort(string keyF, string keyL)
+{
+   // Флаг необходимости сортировки
+   // Правильная позиция - по возрастанию кодов символов
+   bool exitFlag = false, needToS = false;
+   /*Сравнение ключей происходит посимвольно
+     Ключ - 8-ми символьная строка
+     Если первые символы удовлетворяют условию сортировки,
+     то нет смысла смотреть остальные символы 
+    */
+   if(keyF[0] >= keyL[0])
+      for (size_t i = 0; !exitFlag && !needToS && i < 8; i++)
+      {
+         if (keyF[i] > keyL[i])
+            needToS = true;
+         // Если нашли символ, при котором выполняется условие сортировки
+         else if (keyF[i] < keyL[i])
+            exitFlag = true;
+      }
+   return needToS;
+}
+
+/**
+ * Функция сортировки методом Шелла
+ * Сравниваются не только ближайшие позиции,
+ * а также с некоторым шагом step
+ * @param hashTable - указатель на хеш-таблицу
+ * @param priceFlag - флаг по какому ключу сортировать
+ */
+void shellsort(hashTable *t[], bool cipherSort)
+{
+   int step, i, j;
+   // Переменная для перестановки ячеек
+   hashTable *tmp;
+   // Сортировка по шифру
+   if (cipherSort)
+   {
+      // Выбор шага
+      for (step = capacity / 2; step > 0; step /= 2)
+         // Элементы, которые сортируются на определённом шаге
+         for (i = step; i < capacity; i++)
+            // Перестановка элементов внутри подсписка
+            for (j = i - step; j >= 0; j -= step)
+               // Если j-я ячейка пуста - переставляем ячейки
+               if (!t[j] && t[j + step])
+               {
+                  t[j] = t[j + step];
+                  t[j + step] = NULL;
+               }
+               // Проверяем необходимость перестановки
+               else if (t[j + step] && needToSort(t[j]->key, t[j + step]->key))
+               {
+                  tmp = t[j];
+                  t[j] = t[j + step];
+                  t[j + step] = tmp;
+               }
+   }
+   // Сортировка по количеству
+   else
+   {
+      // Выбор шага
+      for (step = capacity / 2; step > 0; step /= 2)
+         // Элементы, которые сортируются на определённом шаге
+         for (i = step; i < capacity; i++)
+            // Перестановка элементов внутри подсписка
+            for (j = i - step; j >= 0; j -= step)
+               // Если j-я ячейка пуста - переставляем ячейки
+               if (!t[j] && t[j + step])
+               {
+                  t[j] = t[j + step];
+                  t[j + step] = NULL;
+               }
+               // Проверяем необходимость перестановки
+               else if (t[j + step] && t[j]->value > t[j + step]->value)
+               {
+                  tmp = t[j];
+                  t[j] = t[j + step];
+                  t[j + step] = tmp;
+               }
    }
 }
 
@@ -151,26 +247,43 @@ int main()
    setlocale(LC_ALL, "");
    // fileVal - Количество изделия
    // nСomand - Номер команды операции
-   unsigned int fileVal, nСomand = 0;
+   size_t fileVal, filePrice, nСomand = 0;
    // fileName - Имя изделия
    // fileKey - Шифр изделия
    // fnd_key - Переменная поискового ключа
    string fileName, fileKey, fnd_key;
    bool exitFlag = false, repeatFlag = false;
+   // Основная таблица
    hashTable *hTable[capacity];
-   for (int i = 0; i < capacity; i++) 
+   // Ценовая таблица
+   hashTable *pTable[capacity];
+   // Для дальнейшей проверки на пустоту ячеек
+   for (size_t i = 0; i < capacity; i++)
+   {
       hTable[i] = NULL;
+      pTable[i] = NULL;
+   }
+   // Файл ценовой таблицы
+   ifstream priceIn("pricelist.txt");
+   // Файл основной таблицы
    ifstream in("work.txt");
-   // Пока не прочтем весь файл
+   // Заполняем таблицу с ценами
+   while (priceIn >> fileKey >> filePrice)
+      insert(pTable, fileKey, filePrice);
+   // Сортируем таблицу с ценами по шифру
+   shellsort(pTable, true);
+   // Заполняем основную таблицу
+   // Если в ценовой таблице 
+   // не оказалось нужного элемента - записать 0
    while (in >> fileKey >> fileVal >> fileName)
-      insert(hTable, fileKey, fileVal, fileName);
+      insert(hTable, fileKey, find(pTable, fileKey) ? find(pTable, fileKey)->price : 0, fileVal,  fileName);
    // Пользовательское меню
    do
    {
-      cout << "<1> - Найти элемент по шифру" << endl;
-      cout << "<2> - Извлечь элемент по шифру" << endl;
-      cout << "<3> - Вывести элементы таблицы" << endl;
-      cout << "<4> - Выход" << endl;
+      cout << "<1> - Найти элемент по шифру" << endl
+         << "<2> - Вывести элементы таблицы" << endl
+         << "<3> - Отсортировать таблицу по количеству" << endl
+         << "<4> - Выход" << endl;
       repeatFlag = false;
       do
       {
@@ -191,18 +304,11 @@ int main()
                   return 0;
                }
                break;
-            case CMD_POP: // Удаление элемента 
-               cout << "Введите шифр изделия: ";
-               if (cin >> fnd_key)
-                  remove(hTable, fnd_key);
-               else
-               {
-                  cout << "Ошибка ввода" << endl;
-                  return 0;
-               }
-               break;
             case CMD_PRINT: // Вывод элементов 
                print(hTable);
+               break;
+              case CMD_SORT: // Сортировка по количеству
+               shellsort(hTable, false);
                break;
             case CMD_EXIT: // Выход из программы
                exitFlag = true;
